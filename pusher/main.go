@@ -38,7 +38,7 @@ func (c *client) fetchJWT() error {
 	if err != nil {
 		panic(err)
 	}
-	msg, err := nc.Request("cm.placeholder.jwt", data, time.Second)
+	msg, err := nc.Request("ngs.cm.jwt", data, time.Second)
 	if err != nil {
 		panic(err)
 	}
@@ -59,7 +59,7 @@ func (c *client) fetchAccounts() error {
 	if err != nil {
 		panic(err)
 	}
-	msg, err := nc.Request("cm.placeholder.accounts", data, time.Second)
+	msg, err := nc.Request("ngs.cm.accounts", data, time.Second)
 	if err != nil {
 		panic(err)
 	}
@@ -88,7 +88,7 @@ func (c *client) register() error {
 	if err != nil {
 		panic(err)
 	}
-	msg, err := nc.Request("cm.placeholder.register", data, time.Second)
+	msg, err := nc.Request("cm.register", data, time.Second)
 	if err != nil {
 		panic(err)
 	}
