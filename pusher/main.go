@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/nats-io/jwt"
 	"io/ioutil"
 	"time"
+
+	"github.com/nats-io/jwt"
 
 	"github.com/aricart/cm"
 	"github.com/nats-io/nats.go"

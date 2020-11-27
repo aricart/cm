@@ -1,12 +1,13 @@
 package cm
 
 import (
-	"github.com/nats-io/jwt"
-	"github.com/nats-io/nkeys"
-	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/nats-io/jwt"
+	"github.com/nats-io/nkeys"
+	"github.com/stretchr/testify/require"
 )
 
 type TestSetup struct {
@@ -29,7 +30,19 @@ func (ts *TestSetup) Cleanup(t *testing.T) {
 	}
 }
 
-func (ts *TestSetup) serializableKeys(t *testing.T, kp nkeys.KeyPair) (string, []byte) {
+func (ts *TestSetup) PublicKey(t *testing.T, kp nkeys.KeyPair) string {
+	pk, err := kp.PublicKey()
+	require.NoError(t, err)
+	return pk
+}
+
+func (ts *TestSetup) SeedKey(t *testing.T, kp nkeys.KeyPair) string {
+	pk, err := kp.Seed()
+	require.NoError(t, err)
+	return string(pk)
+}
+
+func (ts *TestSetup) SerializableKeys(t *testing.T, kp nkeys.KeyPair) (string, []byte) {
 	pk, err := kp.PublicKey()
 	require.NoError(t, err)
 	seed, err := kp.Seed()
@@ -37,35 +50,35 @@ func (ts *TestSetup) serializableKeys(t *testing.T, kp nkeys.KeyPair) (string, [
 	return pk, seed
 }
 
-func (ts *TestSetup) createAccount(t *testing.T) nkeys.KeyPair {
+func (ts *TestSetup) CreateAccount(t *testing.T) nkeys.KeyPair {
 	kp, err := nkeys.CreateAccount()
 	require.NoError(t, err)
 	return kp
 }
 
-func (ts *TestSetup) createUser(t *testing.T) nkeys.KeyPair {
+func (ts *TestSetup) CreateUser(t *testing.T) nkeys.KeyPair {
 	kp, err := nkeys.CreateUser()
 	require.NoError(t, err)
 	return kp
 }
 
-func (ts *TestSetup) makeUserConfig(email string, role UserRole) User {
+func (ts *TestSetup) MakeUserConfig(email string, role UserRole) User {
 	return User{Email: email, Role: role}
 }
 
-func (ts *TestSetup) makeRolePerm(role UserRole, sk string, pub []string, sub []string) RolePerms {
+func (ts *TestSetup) MakeRolePerm(t *testing.T, role UserRole, subj []string) RolePerms {
 	var r RolePerms
 	r.Role = role
-	r.SigningKey = sk
-	r.Pub = pub
-	r.Sub = sub
+	r.SigningKey = ts.SeedKey(t, ts.CreateAccount(t))
+	r.Pub = subj
+	r.Sub = subj
 	return r
 }
 
-func (ts *TestSetup) createConfig(t *testing.T, kp nkeys.KeyPair, rc ResolverConfig) (string, error) {
+func (ts *TestSetup) CreateConfig(t *testing.T, kp nkeys.KeyPair, rc ResolverConfig) (string, error) {
 	var err error
-	pk, _ := ts.serializableKeys(t, kp)
-	gc := jwt.NewGenericClaims(pk)
+	gc := jwt.NewGenericClaims(ts.PublicKey(t, kp))
+	gc.Type = DashboardConfigurationType
 	gc.Data, err = rc.Map()
 	require.NoError(t, err)
 	return gc.Encode(kp)

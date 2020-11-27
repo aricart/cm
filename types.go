@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/nats-io/jwt"
 	"github.com/nats-io/nkeys"
-	"strings"
 )
+
+const DashboardConfigurationType = "dashboard-account-configuration"
 
 type UserAccountRequest struct {
 	Email string `json:"email"`
@@ -88,7 +91,10 @@ type User struct {
 }
 
 func (u Users) Deleted(old Users) Users {
-	if u == nil || old == nil {
+	if u == nil {
+		return old
+	}
+	if old == nil {
 		return nil
 	}
 	m := make(map[string]string)
@@ -127,6 +133,20 @@ type GeneratorConfig struct {
 	Roles []RolePerms `json:"roles"`
 }
 
+func (gc *GeneratorConfig) GetRole(ur UserRole) *RolePerms {
+	for _, r := range gc.Roles {
+		if ur == r.Role {
+			return &r
+		}
+	}
+	return nil
+}
+
+func (gc *GeneratorConfig) AddRole(perms RolePerms) error {
+	gc.Roles = append(gc.Roles, perms)
+	return gc.Validate()
+}
+
 func (gc *GeneratorConfig) Validate() error {
 	if len(gc.Roles) == 0 {
 		return errors.New("invalid role count")
@@ -142,11 +162,14 @@ func (gc *GeneratorConfig) Validate() error {
 		if found {
 			return fmt.Errorf("role %s is multiply defined", i.Role.String())
 		}
-		sk := strings.ToUpper(i.SigningKey)
-		if !nkeys.IsValidPublicAccountKey(sk) {
-			return fmt.Errorf("%q is not a valid signing key", sk)
+		kp, err := nkeys.FromSeed([]byte(i.SigningKey))
+		if err != nil {
+			return err
 		}
-		_, found = keys[sk]
+		if err := nkeys.CompatibleKeyPair(kp, nkeys.PrefixByteSeed, nkeys.PrefixByteAccount); err != nil {
+			return fmt.Errorf("%q is not a valid signing key", i.SigningKey)
+		}
+		_, found = keys[i.SigningKey]
 		if found {
 			return fmt.Errorf("signing key %s is multiply defined", i.SigningKey)
 		}
@@ -161,6 +184,10 @@ type RolePerms struct {
 	Sub        []string `json:"sub_permissions"`
 }
 
+func (rp *RolePerms) KeyPair() (nkeys.KeyPair, error) {
+	return nkeys.FromSeed([]byte(rp.SigningKey))
+}
+
 type Config struct {
 	Account         string
 	Kind            ResolverType
@@ -169,13 +196,55 @@ type Config struct {
 }
 
 func (c *Config) HasUser(email string) bool {
+	return c.getUser(email) != nil
+}
+
+func (c *Config) getUser(email string) *User {
 	email = strings.ToLower(email)
 	for _, e := range c.Users {
 		if strings.ToLower(e.Email) == email {
-			return true
+			return &e
 		}
 	}
-	return false
+	return nil
+}
+
+func (c *Config) ListUsers() StringList {
+	var a StringList
+	for _, e := range c.Users {
+		a.Add(strings.ToLower(e.Email))
+	}
+	return a
+}
+
+func (c *Config) GetUserJwt(email string) (string, error) {
+	email = strings.ToLower(email)
+	if err := c.Validate(); err != nil {
+		return "", err
+	}
+	if c.Kind != Generator {
+		return "", errors.New("not generator")
+	}
+	u := c.getUser(email)
+	if u == nil {
+		return "", nil
+	}
+	perms := c.GeneratorConfig.GetRole(u.Role)
+	if perms == nil {
+		return "", fmt.Errorf("role not found - %s", u.Role.String())
+	}
+
+	sk, err := nkeys.FromSeed([]byte(perms.SigningKey))
+	if err != nil {
+		return "", err
+	}
+
+	uc := jwt.NewUserClaims(email)
+	uc.BearerToken = true
+	uc.IssuerAccount = c.Account
+	uc.Sub.Allow = append(uc.Sub.Allow, perms.Sub...)
+	uc.Pub.Allow = append(uc.Pub.Allow, perms.Pub...)
+	return uc.Encode(sk)
 }
 
 func (c *Config) Validate() error {
@@ -209,6 +278,9 @@ func ParseConfig(token []byte) (*Config, error) {
 	claim, err := jwt.DecodeGeneric(string(token))
 	if err != nil {
 		return nil, err
+	}
+	if claim.Type != DashboardConfigurationType {
+		return nil, fmt.Errorf("bad claim type - %q", claim.Type)
 	}
 
 	// expecting a resolver configuration

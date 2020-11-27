@@ -33,37 +33,51 @@ func (r *StaticFileResolver) init() error {
 	return nil
 }
 
-func (r *StaticFileResolver) Store(token []byte) error {
-	gc, err := jwt.DecodeGeneric(string(token))
+func (r *StaticFileResolver) StoreAccountConfig(token []byte) (*Config, error) {
+	nc, err := ParseConfig(token)
 	if err != nil {
-		return err
+		return nc, err
 	}
-	var id string
-	var fp string
-	switch gc.Type {
-	case "":
-		gc, err := jwt.DecodeGeneric(string(token))
+	otoken, err := r.GetConfig(nc.Account)
+	if err != nil {
+		return nc, err
+	}
+	var oc *Config
+	if otoken != nil {
+		oc, err = ParseConfig(otoken)
 		if err != nil {
-			return fmt.Errorf("unable to decode generic JWT: %v", err)
+			return nc, err
 		}
-		fp = r.calcConfigDir(gc.Issuer)
-		id = gc.Issuer
+	}
+	// if we have an old static config, but new one is different StoreAccountConfig
+	if oc != nil && oc.Kind == Static {
+		// if changed type delete all users
+		if oc.Kind != nc.Kind {
+			r.deleteUserJwts(oc.Account, oc.Users)
+		} else {
+			deleted := nc.Users.Deleted(oc.Users)
+			r.deleteUserJwts(oc.Account, deleted)
+		}
+	}
+	fp := r.calcConfigDir(nc.Account)
+	if err := r.ensureDir(fp); err != nil {
+		return nc, err
+	}
+	return nc, ioutil.WriteFile(filepath.Join(fp, nc.Account), token, 0644)
+}
 
-	case jwt.UserClaim:
-		uc, err := jwt.DecodeUserClaims(string(token))
-		if err != nil {
-			return fmt.Errorf("unable to decode user JWT: %v", err)
-		}
-		// associate the user with the account that generated the JWT
-		id = uc.Issuer
-		if uc.IssuerAccount != "" {
-			id = uc.IssuerAccount
-		}
-		// the "email" should be the uc.Name or it won't be found
-		fp = r.calcUserDir(uc.Name)
-	default:
-		return fmt.Errorf("not supported - %s", gc.Type)
+func (r *StaticFileResolver) StoreUserJwt(token []byte) error {
+	uc, err := jwt.DecodeUserClaims(string(token))
+	if err != nil {
+		return fmt.Errorf("unable to decode user JWT: %v", err)
 	}
+	// associate the user with the account that generated the JWT
+	id := uc.Issuer
+	if uc.IssuerAccount != "" {
+		id = uc.IssuerAccount
+	}
+	// the "email" should be the uc.Name or it won't be found
+	fp := r.calcUserDir(uc.Name)
 	if err := r.ensureDir(fp); err != nil {
 		return err
 	}
@@ -85,11 +99,20 @@ func (r *StaticFileResolver) GetConfig(account string) ([]byte, error) {
 	return d, err
 }
 
-func (r *StaticFileResolver) deleteUser(account string, user string) error {
+func (r *StaticFileResolver) deleteUserJwts(account string, users Users) error {
+	for _, i := range users {
+		if err := r.deleteUserJwt(account, i.Email); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *StaticFileResolver) deleteUserJwt(account string, user string) error {
 	dir := r.calcUserDir(user)
 	return os.Remove(filepath.Join(dir, account))
 }
-func (r *StaticFileResolver) GetUser(email string, account string) ([]byte, error) {
+func (r *StaticFileResolver) GetUserJwt(email string, account string) ([]byte, error) {
 	account = strings.ToUpper(account)
 	ad, err := r.GetConfig(account)
 	if err != nil || ad == nil {
@@ -117,7 +140,7 @@ func (r *StaticFileResolver) GetUser(email string, account string) ([]byte, erro
 	return d, err
 }
 
-func (r *StaticFileResolver) GetAccounts(email string) ([]string, error) {
+func (r *StaticFileResolver) GetUserAccounts(email string) ([]string, error) {
 	p := r.calcUserDir(email)
 	if !r.dirExists(p) {
 		return nil, nil

@@ -1,8 +1,9 @@
 package cm
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestStaticEmptyConfig(t *testing.T) {
@@ -12,10 +13,11 @@ func TestStaticEmptyConfig(t *testing.T) {
 	var err error
 	var rc ResolverConfig
 	rc.Kind = Static
-	rc.Users = append(rc.Users, ts.makeUserConfig("me@x.y.z", Owner))
+	rc.Users = append(rc.Users, ts.MakeUserConfig("me@x.y.z", Owner))
 
-	akp := ts.createAccount(t)
-	token, err := ts.createConfig(t, akp, rc)
+	akp := ts.CreateAccount(t)
+	token, err := ts.CreateConfig(t, akp, rc)
+	require.NoError(t, err)
 
 	c, err := ParseConfig([]byte(token))
 	require.NoError(t, err)

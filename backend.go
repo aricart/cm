@@ -1,17 +1,26 @@
 package cm
 
+import (
+	"fmt"
+
+	"github.com/nats-io/jwt"
+)
+
 type Backend struct {
-	static  *StaticFileResolver
-	dataDir string
+	sr       *StaticFileResolver
+	dir      string
+	accounts *AccountCache
 }
 
 func NewBackend(dir string) *Backend {
-	return &Backend{dataDir: dir}
+	b := Backend{dir: dir}
+	b.accounts = NewAccountCache()
+	return &b
 }
 
 func (s *Backend) Start() error {
 	var err error
-	s.static, err = NewStaticResolver(s.dataDir)
+	s.sr, err = NewStaticResolver(s.dir)
 	return err
 }
 
@@ -19,47 +28,27 @@ func (s *Backend) Stop() error {
 	return nil
 }
 
-func (s *Backend) deleteUsers(account string, users Users) error {
-	for _, i := range users {
-		if err := s.static.deleteUser(account, i.Email); err != nil {
+func (s *Backend) UpdateConfig(token []byte) error {
+	gc, err := jwt.DecodeGeneric(string(token))
+	if err != nil {
+		return err
+	}
+	switch gc.Type {
+	case "dashboard-account-configuration":
+		c, err := s.sr.StoreAccountConfig(token)
+		if err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func (s *Backend) getConfig(account string) (*Config, error) {
-	old, err := s.static.GetConfig(account)
-	if err != nil {
-		return nil, err
-	}
-	oc, err := ParseConfig(old)
-	if err != nil {
-		return nil, err
-	}
-	return oc, nil
-}
-
-func (s *Backend) UpdateConfig(token []byte) error {
-	nc, err := ParseConfig(token)
-	if err != nil {
-		return err
-	}
-
-	oc, err := s.getConfig(nc.Account)
-	if err != nil {
-		return err
-	}
-
-	// if we have an old static config, but new one is different cleanup
-	if oc != nil && oc.Kind == Static {
-		// if changed type delete all users
-		if oc.Kind != nc.Kind {
-			s.deleteUsers(oc.Account, oc.Users)
+		if c.Kind == Generator {
+			s.accounts.Update(c.Account, c.ListUsers())
 		} else {
-			deleted := nc.Users.Deleted(oc.Users)
-			s.deleteUsers(oc.Account, deleted)
+			s.accounts.RemoveAll(c.Account)
 		}
+		s.accounts.Update(c.Account, c.ListUsers())
+	case jwt.UserClaim:
+		return s.sr.StoreUserJwt(token)
+	default:
+		return fmt.Errorf("not supported - %s", gc.Type)
 	}
 	return nil
 }
@@ -68,7 +57,7 @@ func (s *Backend) GetAccountList(req UserAccountRequest) UserAccountResponse {
 	var resp UserAccountResponse
 	resp.UserAccountRequest = req
 
-	accounts, err := s.static.GetAccounts(req.Email)
+	accounts, err := s.sr.GetUserAccounts(req.Email)
 	if err != nil {
 		resp.Error = err.Error()
 		return resp
@@ -80,7 +69,7 @@ func (s *Backend) GetAccountList(req UserAccountRequest) UserAccountResponse {
 	case 0:
 		resp.Error = "not found"
 	case 1:
-		d, err := s.static.GetUser(req.Email, accounts[0])
+		d, err := s.sr.GetUserJwt(req.Email, accounts[0])
 		if err != nil {
 			resp.Error = err.Error()
 		}
@@ -91,7 +80,7 @@ func (s *Backend) GetAccountList(req UserAccountRequest) UserAccountResponse {
 func (s *Backend) GetUserJwt(req UserJwtRequest) UserJwtResponse {
 	var resp UserJwtResponse
 	resp.UserJwtRequest = req
-	d, err := s.static.GetUser(req.Email, req.Account)
+	d, err := s.sr.GetUserJwt(req.Email, req.Account)
 	if err != nil {
 		resp.Error = err.Error()
 	}
@@ -104,7 +93,7 @@ func (s *Backend) GetUserJwt(req UserJwtRequest) UserJwtResponse {
 
 func (s *Backend) RegisterUser(req RegisterUserRequest) RegisterUserResponse {
 	var resp RegisterUserResponse
-	if err := s.static.Store([]byte(req.Jwt)); err != nil {
+	if err := s.sr.StoreUserJwt([]byte(req.Jwt)); err != nil {
 		resp.Error = err.Error()
 	}
 	return resp
