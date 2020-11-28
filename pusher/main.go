@@ -7,10 +7,9 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/nats-io/jwt"
-
 	"github.com/aricart/cm"
-	"github.com/nats-io/nats.go"
+	"github.com/nats-io/jwt"
+	nats "github.com/nats-io/nats.go"
 )
 
 type client struct {

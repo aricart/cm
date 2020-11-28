@@ -15,8 +15,9 @@ func TestStaticEmptyConfig(t *testing.T) {
 	rc.Kind = Static
 	rc.Users = append(rc.Users, ts.MakeUserConfig("me@x.y.z", Owner))
 
-	akp := ts.CreateAccount(t)
-	token, err := ts.CreateConfig(t, akp, rc)
+	akp := ts.CreateAccountPair(t)
+	token := ts.Encode(t, rc, akp)
+	t.Log(token)
 	require.NoError(t, err)
 
 	c, err := ParseConfig([]byte(token))

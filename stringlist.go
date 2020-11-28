@@ -14,6 +14,11 @@ func NewAccountCache() *AccountCache {
 	return &ac
 }
 
+func (ac *AccountCache) Accounts(email string) []string {
+	email = strings.ToLower(email)
+	return ac.emailToAccounts[email]
+}
+
 func (ac *AccountCache) RemoveAll(account string) {
 	account = strings.ToUpper(account)
 	emails := ac.accountToEmails[account]
@@ -37,7 +42,7 @@ func (ac *AccountCache) Update(account string, emails []string) {
 	ac.accountToEmails[account] = list
 	for _, e := range list {
 		accounts := ac.emailToAccounts[e]
-		accounts.Add(e)
+		accounts.Add(account)
 		ac.emailToAccounts[e] = accounts
 	}
 }

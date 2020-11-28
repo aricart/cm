@@ -137,10 +137,12 @@ func (r *StaticFileResolver) GetUserJwt(email string, account string) ([]byte, e
 			return nil, err
 		}
 	}
+	// FIXME: geterate dynamic
 	return d, err
 }
 
 func (r *StaticFileResolver) GetUserAccounts(email string) ([]string, error) {
+	email = strings.ToLower(email)
 	p := r.calcUserDir(email)
 	if !r.dirExists(p) {
 		return nil, nil

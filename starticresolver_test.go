@@ -18,7 +18,7 @@ func TestEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, r)
 
-	kp := ts.CreateAccount(t)
+	kp := ts.CreateAccountPair(t)
 	pk := ts.PublicKey(t, kp)
 	d, err := r.GetConfig(pk)
 	require.NoError(t, err)
@@ -33,8 +33,8 @@ func TestGetAccount(t *testing.T) {
 	ts := NewTestSetup(t)
 	defer ts.Cleanup(t)
 
-	akp := ts.CreateAccount(t)
-	ukp := ts.CreateUser(t)
+	akp := ts.CreateAccountPair(t)
+	ukp := ts.CreateUserPair(t)
 	uc := jwt.NewUserClaims(ts.PublicKey(t, ukp))
 	uc.Name = "me@x.y.z"
 	userToken, err := uc.Encode(akp)
@@ -62,7 +62,7 @@ func TestGetAccount(t *testing.T) {
 	// create a config for the account
 	var rc ResolverConfig
 	rc.Users = append(rc.Users, ts.MakeUserConfig(uc.Name, Owner))
-	config, err := ts.CreateConfig(t, akp, rc)
+	config := ts.Encode(t, rc, akp)
 	require.NoError(t, err)
 	_, err = r.StoreAccountConfig([]byte(config))
 	require.NoError(t, err)
@@ -82,8 +82,8 @@ func TestRemoveUser(t *testing.T) {
 	ts := NewTestSetup(t)
 	defer ts.Cleanup(t)
 
-	akp := ts.CreateAccount(t)
-	ukp := ts.CreateUser(t)
+	akp := ts.CreateAccountPair(t)
+	ukp := ts.CreateUserPair(t)
 	uc := jwt.NewUserClaims(ts.PublicKey(t, ukp))
 	uc.Name = "me@x.y.z"
 	userToken, err := uc.Encode(akp)
@@ -94,7 +94,7 @@ func TestRemoveUser(t *testing.T) {
 	// create a config for the account
 	var rc ResolverConfig
 	rc.Users = append(rc.Users, ts.MakeUserConfig(uc.Name, Owner))
-	config, err := ts.CreateConfig(t, akp, rc)
+	config := ts.Encode(t, rc, akp)
 	require.NoError(t, err)
 	_, err = r.StoreAccountConfig([]byte(config))
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestRemoveUser(t *testing.T) {
 
 	// remove the user
 	rc.Users = nil
-	config, err = ts.CreateConfig(t, akp, rc)
+	config = ts.Encode(t, rc, akp)
 	require.NoError(t, err)
 	_, err = r.StoreAccountConfig([]byte(config))
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestUnsuportedStoreErrors(t *testing.T) {
 	r, err := NewStaticResolver(ts.dir)
 	require.NoError(t, err)
 
-	akp := ts.CreateAccount(t)
+	akp := ts.CreateAccountPair(t)
 	ac := jwt.NewAccountClaims(ts.PublicKey(t, akp))
 	badToken, err := ac.Encode(akp)
 	require.NoError(t, err)

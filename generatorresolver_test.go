@@ -1,9 +1,10 @@
 package cm
 
 import (
+	"testing"
+
 	"github.com/nats-io/jwt"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestGeneratorResolver(t *testing.T) {
@@ -23,27 +24,31 @@ func TestGeneratorResolver(t *testing.T) {
 	manager := ts.MakeRolePerm(t, Manager, []string{"dashboard.manager.>"})
 	gc.AddRole(owner)
 	gc.AddRole(manager)
+	rc.ResolverOptions = gc
 
-	akp := ts.CreateAccount(t)
+	akp := ts.CreateAccountPair(t)
 
-	config, err := ts.CreateConfig(t, akp, rc)
+	cd := ts.Encode(t, rc, akp)
+	require.NoError(t, be.UpdateConfig([]byte(cd)))
+
+	config, err := ParseConfig([]byte(cd))
 	require.NoError(t, err)
-	be.UpdateConfig([]byte(config))
+
+	token, err := config.GetUserJwt("a@x.y.c")
 	require.NoError(t, err)
-
-	var req UserAccountRequest
-	req.Email = "a@x.y.c"
-	res := be.GetAccountList(req)
-	require.Empty(t, res.Error)
-	require.Len(t, res.Accounts, 1)
-	require.Equal(t, res.Account, ts.PublicKey(t, akp))
-	require.NotEmpty(t, res.Jwt)
-
-	uc, err := jwt.DecodeUserClaims(res.Jwt)
+	uc, err := jwt.DecodeUserClaims(string(token))
 	require.NoError(t, err)
 	okp, err := owner.KeyPair()
 	require.NoError(t, err)
 	require.Equal(t, ts.PublicKey(t, okp), uc.Issuer)
 	require.Equal(t, ts.PublicKey(t, akp), uc.IssuerAccount)
 
+	token, err = config.GetUserJwt("b@x.y.c")
+	require.NoError(t, err)
+	uc, err = jwt.DecodeUserClaims(string(token))
+	require.NoError(t, err)
+	okp, err = manager.KeyPair()
+	require.NoError(t, err)
+	require.Equal(t, ts.PublicKey(t, okp), uc.Issuer)
+	require.Equal(t, ts.PublicKey(t, akp), uc.IssuerAccount)
 }

@@ -2,6 +2,7 @@ package cm
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/nats-io/jwt"
 )
@@ -44,7 +45,6 @@ func (s *Backend) UpdateConfig(token []byte) error {
 		} else {
 			s.accounts.RemoveAll(c.Account)
 		}
-		s.accounts.Update(c.Account, c.ListUsers())
 	case jwt.UserClaim:
 		return s.sr.StoreUserJwt(token)
 	default:
@@ -53,48 +53,42 @@ func (s *Backend) UpdateConfig(token []byte) error {
 	return nil
 }
 
-func (s *Backend) GetAccountList(req UserAccountRequest) UserAccountResponse {
-	var resp UserAccountResponse
-	resp.UserAccountRequest = req
-
-	accounts, err := s.sr.GetUserAccounts(req.Email)
+func (s *Backend) GetAccountList(email string) ([]string, error) {
+	email = strings.ToUpper(email)
+	accounts, err := s.sr.GetUserAccounts(email)
 	if err != nil {
-		resp.Error = err.Error()
-		return resp
+		return nil, err
 	}
-	// return all accounts found always
-	resp.Accounts = accounts
-	count := len(accounts)
-	switch count {
-	case 0:
-		resp.Error = "not found"
-	case 1:
-		d, err := s.sr.GetUserJwt(req.Email, accounts[0])
+	accounts = append(accounts, s.accounts.Accounts(email)...)
+	return accounts, nil
+}
+func (s *Backend) GetUserJwt(account string, email string) ([]byte, error) {
+	cd, err := s.sr.GetConfig(account)
+	if err != nil {
+		return nil, err
+	}
+
+	c, err := ParseConfig(cd)
+	if err != nil {
+		return nil, err
+	}
+	switch c.Kind {
+	case Static:
+		td, err := s.sr.GetUserJwt(email, account)
 		if err != nil {
-			resp.Error = err.Error()
+			return nil, err
 		}
-		resp.Jwt = string(d)
+		if td == nil {
+			return nil, nil
+		}
+		return td, nil
+	case Generator:
+		return c.GetUserJwt(email)
+	default:
+		return nil, fmt.Errorf("unknown configuration type - %q", c.Kind)
 	}
-	return resp
-}
-func (s *Backend) GetUserJwt(req UserJwtRequest) UserJwtResponse {
-	var resp UserJwtResponse
-	resp.UserJwtRequest = req
-	d, err := s.sr.GetUserJwt(req.Email, req.Account)
-	if err != nil {
-		resp.Error = err.Error()
-	}
-	if d == nil {
-		resp.Error = "not found"
-	}
-	resp.Jwt = string(d)
-	return resp
 }
 
-func (s *Backend) RegisterUser(req RegisterUserRequest) RegisterUserResponse {
-	var resp RegisterUserResponse
-	if err := s.sr.StoreUserJwt([]byte(req.Jwt)); err != nil {
-		resp.Error = err.Error()
-	}
-	return resp
+func (s *Backend) RegisterUser(d []byte) error {
+	return s.sr.StoreUserJwt(d)
 }

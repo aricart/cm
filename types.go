@@ -112,9 +112,17 @@ func (u Users) Deleted(old Users) Users {
 }
 
 type ResolverConfig struct {
-	Kind           ResolverType `json:"kind"`
-	ResolverConfig interface{}  `json:"config"`
-	Users          Users        `json:"users"`
+	Kind            ResolverType `json:"kind"`
+	ResolverOptions interface{}  `json:"options"`
+	Users           Users        `json:"users"`
+}
+
+func (rc *ResolverConfig) OptionsAsGeneratorConfig() *GeneratorConfig {
+	gc, ok := rc.ResolverOptions.(GeneratorConfig)
+	if !ok {
+		return nil
+	}
+	return &gc
 }
 
 func (rc *ResolverConfig) Map() (map[string]interface{}, error) {
@@ -127,6 +135,20 @@ func (rc *ResolverConfig) Map() (map[string]interface{}, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+func (rc *ResolverConfig) Encode(kp nkeys.KeyPair) (string, error) {
+	pk, err := kp.PublicKey()
+	if err != nil {
+		return "", err
+	}
+	gc := jwt.NewGenericClaims(pk)
+	gc.Type = DashboardConfigurationType
+	gc.Data, err = rc.Map()
+	if err != nil {
+		return "", err
+	}
+	return gc.Encode(kp)
 }
 
 type GeneratorConfig struct {
@@ -217,34 +239,44 @@ func (c *Config) ListUsers() StringList {
 	return a
 }
 
-func (c *Config) GetUserJwt(email string) (string, error) {
+func (c *Config) GetUserJwt(email string) ([]byte, error) {
 	email = strings.ToLower(email)
 	if err := c.Validate(); err != nil {
-		return "", err
+		return nil, err
 	}
 	if c.Kind != Generator {
-		return "", errors.New("not generator")
+		return nil, errors.New("not generator")
 	}
 	u := c.getUser(email)
 	if u == nil {
-		return "", nil
+		return nil, nil
 	}
 	perms := c.GeneratorConfig.GetRole(u.Role)
 	if perms == nil {
-		return "", fmt.Errorf("role not found - %s", u.Role.String())
+		return nil, fmt.Errorf("role not found - %s", u.Role.String())
 	}
 
 	sk, err := nkeys.FromSeed([]byte(perms.SigningKey))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	uc := jwt.NewUserClaims(email)
+	ukp, err := nkeys.CreateUser()
+	if err != nil {
+		return nil, err
+	}
+	upk, err := ukp.PublicKey()
+	if err != nil {
+		return nil, err
+	}
+	uc := jwt.NewUserClaims(upk)
+	uc.Name = email
 	uc.BearerToken = true
 	uc.IssuerAccount = c.Account
 	uc.Sub.Allow = append(uc.Sub.Allow, perms.Sub...)
 	uc.Pub.Allow = append(uc.Pub.Allow, perms.Pub...)
-	return uc.Encode(sk)
+	s, err := uc.Encode(sk)
+	return []byte(s), err
 }
 
 func (c *Config) Validate() error {
@@ -303,7 +335,7 @@ func ParseConfig(token []byte) (*Config, error) {
 	config.Kind = rc.Kind
 	config.Users = rc.Users
 	if config.Kind == Generator {
-		cc, err := json.Marshal(rc.ResolverConfig)
+		cc, err := json.Marshal(rc.ResolverOptions)
 		if err != nil {
 			return nil, err
 		}
