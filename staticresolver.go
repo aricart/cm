@@ -137,7 +137,6 @@ func (r *StaticFileResolver) GetUserJwt(email string, account string) ([]byte, e
 			return nil, err
 		}
 	}
-	// FIXME: geterate dynamic
 	return d, err
 }
 

@@ -19,7 +19,7 @@ func TestBackendSimple(t *testing.T) {
 	rc := ts.CreateResolverConfig(t, Generator)
 	rc.Users = append(rc.Users, ts.MakeUserConfig("a@x.y.c", Owner))
 	rc.Users = append(rc.Users, ts.MakeUserConfig("b@x.y.c", Manager))
-	require.NoError(t, be.UpdateConfig([]byte(ts.Encode(t, rc, akp))))
+	require.NoError(t, be.UpdateAccountConfig([]byte(ts.EncodeResolverConfig(t, rc, akp))))
 
 	// add a static configuration
 	a2kp := ts.CreateAccountPair(t)
@@ -27,21 +27,21 @@ func TestBackendSimple(t *testing.T) {
 	src := ts.CreateResolverConfig(t, Static)
 	src.Users = append(src.Users, ts.MakeUserConfig("a@a.b.c", Owner))
 	src.Users = append(src.Users, ts.MakeUserConfig("b@a.b.c", Manager))
-	require.NoError(t, be.UpdateConfig([]byte(ts.Encode(t, src, a2kp))))
+	require.NoError(t, be.UpdateAccountConfig([]byte(ts.EncodeResolverConfig(t, src, a2kp))))
 	// seed user a+b
 	a := ts.CreateUser(t, "a@a.b.c", a2kp)
-	require.NoError(t, be.RegisterUser([]byte(a)))
+	require.NoError(t, be.AddUserJwt([]byte(a)))
 	b := ts.CreateUser(t, "b@a.b.c", a2kp)
-	require.NoError(t, be.RegisterUser([]byte(b)))
+	require.NoError(t, be.AddUserJwt([]byte(b)))
 
 	// get a generated user
-	accounts, err := be.GetAccountList("a@x.y.c")
+	accounts, err := be.GetUserAccounts("a@x.y.c")
 	require.NoError(t, err)
 	require.Len(t, accounts, 1)
 	require.Equal(t, accounts[0], ts.PublicKey(t, akp))
 
 	// get a static user
-	accounts, err = be.GetAccountList("a@a.b.c")
+	accounts, err = be.GetUserAccounts("a@a.b.c")
 	require.NoError(t, err)
 	require.Len(t, accounts, 1)
 	require.Equal(t, accounts[0], ts.PublicKey(t, a2kp))

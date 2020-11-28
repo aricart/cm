@@ -2,7 +2,9 @@ package cm
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/nats-io/nats-server/v2/logger"
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -30,6 +32,12 @@ func (cm *CredentialsManager) init() error {
 	return cm.backend.Start()
 }
 
+const SubjGetUserJwt = "cm.get.user.jwt"
+const SubjUserAccounts = "cm.get.user.accounts"
+const SubjAddUserJwt = "cm.add.user.jwt"
+const SubjUpdateAccountConfig = "cm.update.account.config"
+const SubjGetAccountConfig = "cm.get.account.config"
+
 func (cm *CredentialsManager) Run() error {
 	var err error
 	if err = cm.init(); err != nil {
@@ -48,10 +56,11 @@ func (cm *CredentialsManager) Run() error {
 	}
 	// FIXME: check errors
 	// FIXME: add handlers
-	cm.nc.Subscribe("cm.jwt", cm.GetUserJwt)
-	cm.nc.Subscribe("cm.accounts", cm.GetAccountList)
-	cm.nc.Subscribe("cm.register", cm.Register)
-	cm.nc.Subscribe("cm.config", cm.UpdateConfig)
+	cm.nc.Subscribe(SubjGetUserJwt, cm.GetUserJwt)
+	cm.nc.Subscribe(SubjUserAccounts, cm.GetUserAccounts)
+	cm.nc.Subscribe(SubjAddUserJwt, cm.AddUserJwt)
+	cm.nc.Subscribe(SubjUpdateAccountConfig, cm.UpdateAccountConfig)
+	cm.nc.Subscribe(SubjGetAccountConfig, cm.GetAccountConfig)
 	cm.nc.Flush()
 	return nil
 }
@@ -60,10 +69,151 @@ func (cm *CredentialsManager) Stop() {
 	cm.nc.Close()
 }
 
-func (cm *CredentialsManager) RespondJSON(ctx *nats.Msg, o interface{}) {
-	d, err := json.Marshal(o)
+type RequestResponse struct {
+	Error string `json:"error"`
+}
+
+type UserRequest struct {
+	Email   string `json:"email"`
+	Account string `json:"account"`
+}
+
+type UserResponse struct {
+	UserRequest
+	RequestResponse
+	Jwt string `json:"jwt"`
+}
+
+func (cm *CredentialsManager) GetUserJwt(m *nats.Msg) {
+	var req UserRequest
+	if err := cm.ParseRequest(m, &req); err != nil {
+		return
+	}
+	var resp UserResponse
+	resp.UserRequest = req
+	d, err := cm.backend.GetUserJwt(req.Account, req.Email)
 	if err != nil {
-		cm.logger.Errorf("[cm] error serializing response: %v", err)
+		em := fmt.Sprintf("error retrieving user %q for account %s", req.Account, req.Email)
+		cm.RespondError(m, http.StatusInternalServerError, em, err)
+		return
+	}
+	resp.Jwt = string(d)
+	cm.Respond(m, resp)
+}
+
+type UserAccountsRequest struct {
+	Email string `json:"email"`
+}
+
+type UserAccountsResponse struct {
+	UserAccountsRequest
+	UserResponse
+	RequestResponse
+	Accounts []string `json:"accounts"`
+}
+
+func (cm *CredentialsManager) GetUserAccounts(m *nats.Msg) {
+	var req UserAccountsRequest
+	if err := cm.ParseRequest(m, &req); err != nil {
+		return
+	}
+
+	var resp UserAccountsResponse
+	resp.UserAccountsRequest = req
+	accounts, err := cm.backend.GetUserAccounts(req.Email)
+	if err != nil {
+		em := fmt.Sprintf("error getting account list for %q", req.Email)
+		cm.RespondError(m, http.StatusInternalServerError, em, err)
+		return
+	}
+	resp.Accounts = accounts
+	switch len(accounts) {
+	case 0:
+		cm.RespondError(m, http.StatusNotFound, "account not found", nil)
+		return
+	case 1:
+		resp.Account = accounts[0]
+		d, err := cm.backend.GetUserJwt(accounts[0], req.Email)
+		if err != nil {
+			em := fmt.Sprintf("error retrieving user %q for account %s", req.Email, accounts[0])
+			cm.RespondError(m, http.StatusInternalServerError, em, err)
+			return
+		} else {
+			resp.Jwt = string(d)
+		}
+	}
+	cm.Respond(m, resp)
+}
+
+type UpdateUserRequest struct {
+	Jwt string `json:"jwt"`
+}
+
+type UpdateUserResponse struct {
+	RequestResponse
+}
+
+func (cm *CredentialsManager) AddUserJwt(m *nats.Msg) {
+	var req UpdateUserRequest
+	if err := cm.ParseRequest(m, &req); err != nil {
+		return
+	}
+	var resp UpdateUserResponse
+	if err := cm.backend.AddUserJwt([]byte(req.Jwt)); err != nil {
+		cm.RespondError(m, http.StatusInternalServerError, "error registering user", err)
+		return
+	}
+	cm.Respond(m, resp)
+}
+
+type UpdateAccountRequest struct {
+	Jwt string `json:"jwt"`
+}
+
+type UpdateAccountResponse struct {
+	RequestResponse
+}
+
+func (cm *CredentialsManager) UpdateAccountConfig(m *nats.Msg) {
+	var req UpdateAccountRequest
+	if err := cm.ParseRequest(m, &req); err != nil {
+		return
+	}
+	if err := cm.backend.UpdateAccountConfig([]byte(req.Jwt)); err != nil {
+		cm.RespondError(m, http.StatusInternalServerError, "error updating account config", err)
+		return
+	}
+	cm.Respond(m, RequestResponse{})
+}
+
+type AccountRequest struct {
+	Token string `json:"jwt"`
+}
+
+type AccountRequestResponse struct {
+	RequestResponse
+	Jwt string `json:"jwt"`
+}
+
+func (cm *CredentialsManager) GetAccountConfig(m *nats.Msg) {
+	var req AccountRequest
+	if err := cm.ParseRequest(m, &req); err != nil {
+		return
+	}
+	d, err := cm.backend.GetAccountConfig([]byte(req.Token))
+	if err != nil {
+		cm.RespondError(m, http.StatusInternalServerError, "error getting account config", err)
+		return
+	}
+	var resp AccountRequestResponse
+	resp.Jwt = string(d)
+	cm.Respond(m, resp)
+}
+
+func (cm *CredentialsManager) Respond(ctx *nats.Msg, o interface{}) {
+	d, err := json.MarshalIndent(o, "", "\t")
+	if err != nil {
+		cm.RespondError(ctx, http.StatusInternalServerError, "error serializing response", err)
 		return
 	}
 	if err := ctx.Respond(d); err != nil {
@@ -72,77 +222,21 @@ func (cm *CredentialsManager) RespondJSON(ctx *nats.Msg, o interface{}) {
 	}
 }
 
-func (cm *CredentialsManager) GetUserJwt(m *nats.Msg) {
-	var req UserJwtRequest
-	var resp UserJwtResponse
-	if err := json.Unmarshal(m.Data, &req); err != nil {
-		cm.logger.Errorf("[cm] error unmarshalling: %v", err)
-		resp.Error = "internal server error"
-	} else {
-		resp.UserJwtRequest = req
-		d, err := cm.backend.GetUserJwt(req.Account, req.Email)
-		if err != nil {
-			cm.logger.Errorf("[cm] error retrieving user %q for account %s: %v", req.Account, req.Email, err)
-			resp.Error = "internal server error"
-			cm.RespondJSON(m, resp)
-			return
-		}
-		resp.Jwt = string(d)
+func (cm *CredentialsManager) RespondError(ctx *nats.Msg, status int, msg string, err error) {
+	em := fmt.Sprintf("[cm] %s", msg)
+	if err != nil {
+		em = fmt.Sprintf("[cm] %s: %v", msg, err)
 	}
-	cm.RespondJSON(m, resp)
+	cm.logger.Errorf(em)
+	cm.Respond(ctx, RequestResponse{Error: http.StatusText(status)})
 }
 
-func (cm *CredentialsManager) GetAccountList(m *nats.Msg) {
-	var req UserAccountRequest
-	var resp UserAccountResponse
-	if err := json.Unmarshal(m.Data, &req); err != nil {
+func (cm *CredentialsManager) ParseRequest(ctx *nats.Msg, o interface{}) error {
+	err := json.Unmarshal(ctx.Data, &o)
+	if err != nil {
 		cm.logger.Errorf("[cm] error unmarshalling: %v", err)
-		resp.Error = "internal server error"
-	} else {
-		resp.UserAccountRequest = req
-		accounts, err := cm.backend.GetAccountList(req.Email)
-		if err != nil {
-			cm.logger.Errorf("[cm] error getting account list for %q: %v", req.Email, err)
-			resp.Error = "internal server error"
-		}
-		resp.Accounts = accounts
-		switch len(accounts) {
-		case 0:
-			resp.Error = "not found"
-		case 1:
-			resp.Account = accounts[0]
-			d, err := cm.backend.GetUserJwt(accounts[0], req.Email)
-			if err != nil {
-				cm.logger.Errorf("[cm] error retrieving user %q for account %s: %v", accounts[0], req.Email, err)
-				resp.Error = "internal server error"
-			} else {
-				resp.Jwt = string(d)
-			}
-		}
+		cm.Respond(ctx, RequestResponse{Error: "bad request"})
+		return err
 	}
-	cm.RespondJSON(m, resp)
-}
-
-func (cm *CredentialsManager) Register(m *nats.Msg) {
-	var resp RegisterUserResponse
-	var req RegisterUserRequest
-	if err := json.Unmarshal(m.Data, &req); err != nil {
-		cm.logger.Errorf("[cm] error unmarshalling: %v", err)
-		resp.Error = "internal server error"
-	} else if err := cm.backend.RegisterUser([]byte(req.Jwt)); err != nil {
-		cm.logger.Errorf("[cm] error registering user: %v", err)
-		resp.Error = "internal server error"
-	}
-	if resp.Error != "" {
-		log.Printf("Error registering user: %v", resp.Error)
-	}
-	cm.RespondJSON(m, resp)
-}
-
-func (cm *CredentialsManager) UpdateConfig(m *nats.Msg) {
-	if err := cm.backend.UpdateConfig(m.Data); err != nil {
-		m.Respond([]byte(err.Error()))
-	} else {
-		m.Respond(nil)
-	}
+	return nil
 }

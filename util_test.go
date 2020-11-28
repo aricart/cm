@@ -3,10 +3,11 @@ package cm
 import (
 	"encoding/json"
 	"fmt"
-	natsservertest "github.com/nats-io/nats-server/v2/test"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	natsservertest "github.com/nats-io/nats-server/v2/test"
 
 	"github.com/nats-io/jwt"
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -108,7 +109,13 @@ func (ts *TestSetup) MakeRolePerm(t *testing.T, role UserRole, subj []string) Ro
 	return r
 }
 
-func (ts *TestSetup) Encode(t *testing.T, rc ResolverConfig, kp nkeys.KeyPair) string {
+func (ts *TestSetup) Encode(t *testing.T, c jwt.Claims, kp nkeys.KeyPair) string {
+	token, err := c.Encode(kp)
+	require.NoError(t, err)
+	return token
+}
+
+func (ts *TestSetup) EncodeResolverConfig(t *testing.T, rc ResolverConfig, kp nkeys.KeyPair) string {
 	token, err := rc.Encode(kp)
 	require.NoError(t, err)
 	return token
@@ -140,4 +147,9 @@ func (ts *TestSetup) ToJSON(t *testing.T, o interface{}) []byte {
 	d, err := json.Marshal(o)
 	require.NoError(t, err)
 	return d
+}
+
+func (ts *TestSetup) FromJSON(t *testing.T, d []byte, o interface{}) {
+	err := json.Unmarshal(d, o)
+	require.NoError(t, err)
 }

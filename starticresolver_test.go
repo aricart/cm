@@ -62,7 +62,7 @@ func TestGetAccount(t *testing.T) {
 	// create a config for the account
 	var rc ResolverConfig
 	rc.Users = append(rc.Users, ts.MakeUserConfig(uc.Name, Owner))
-	config := ts.Encode(t, rc, akp)
+	config := ts.EncodeResolverConfig(t, rc, akp)
 	require.NoError(t, err)
 	_, err = r.StoreAccountConfig([]byte(config))
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestRemoveUser(t *testing.T) {
 	// create a config for the account
 	var rc ResolverConfig
 	rc.Users = append(rc.Users, ts.MakeUserConfig(uc.Name, Owner))
-	config := ts.Encode(t, rc, akp)
+	config := ts.EncodeResolverConfig(t, rc, akp)
 	require.NoError(t, err)
 	_, err = r.StoreAccountConfig([]byte(config))
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestRemoveUser(t *testing.T) {
 
 	// remove the user
 	rc.Users = nil
-	config = ts.Encode(t, rc, akp)
+	config = ts.EncodeResolverConfig(t, rc, akp)
 	require.NoError(t, err)
 	_, err = r.StoreAccountConfig([]byte(config))
 	require.NoError(t, err)

@@ -12,36 +12,6 @@ import (
 
 const DashboardConfigurationType = "dashboard-account-configuration"
 
-type UserAccountRequest struct {
-	Email string `json:"email"`
-}
-
-type UserAccountResponse struct {
-	UserAccountRequest
-	UserJwtResponse
-	Accounts []string `json:"accounts"`
-	Error    string   `json:"error"`
-}
-
-type UserJwtRequest struct {
-	Email   string `json:"email"`
-	Account string `json:"account"`
-}
-
-type UserJwtResponse struct {
-	UserJwtRequest
-	Jwt   string `json:"jwt"`
-	Error string `json:"error"`
-}
-
-type RegisterUserRequest struct {
-	Jwt string `json:"jwt"`
-}
-
-type RegisterUserResponse struct {
-	Error string `json:"error"`
-}
-
 type ResolverType int
 
 const (

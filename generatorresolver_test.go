@@ -28,8 +28,8 @@ func TestGeneratorResolver(t *testing.T) {
 
 	akp := ts.CreateAccountPair(t)
 
-	cd := ts.Encode(t, rc, akp)
-	require.NoError(t, be.UpdateConfig([]byte(cd)))
+	cd := ts.EncodeResolverConfig(t, rc, akp)
+	require.NoError(t, be.UpdateAccountConfig([]byte(cd)))
 
 	config, err := ParseConfig([]byte(cd))
 	require.NoError(t, err)
