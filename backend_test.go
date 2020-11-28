@@ -45,4 +45,8 @@ func TestBackendSimple(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, accounts, 1)
 	require.Equal(t, accounts[0], ts.PublicKey(t, a2kp))
+
+	d, err := be.GetUserJwt(accounts[0], "a@a.b.c")
+	require.NoError(t, err)
+	require.Equal(t, a, string(d))
 }

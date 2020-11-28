@@ -30,24 +30,30 @@ func (cm *CredentialsManager) init() error {
 	return cm.backend.Start()
 }
 
-func (cm *CredentialsManager) Run() {
+func (cm *CredentialsManager) Run() error {
 	var err error
 	if err = cm.init(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	var options []nats.Option
+	options = append(options, nats.MaxReconnects(-1))
+	options = append(options, nats.RetryOnFailedConnect(true))
+
 	if cm.CredentialsFile != "" {
 		options = append(options, nats.UserCredentials(cm.CredentialsFile))
 	}
 	if cm.nc, err = nats.Connect(cm.NatsHostPort, options...); err != nil {
-		log.Fatal(err)
+		return err
 	}
-
+	// FIXME: check errors
+	// FIXME: add handlers
 	cm.nc.Subscribe("cm.jwt", cm.GetUserJwt)
 	cm.nc.Subscribe("cm.accounts", cm.GetAccountList)
 	cm.nc.Subscribe("cm.register", cm.Register)
 	cm.nc.Subscribe("cm.config", cm.UpdateConfig)
+	cm.nc.Flush()
+	return nil
 }
 
 func (cm *CredentialsManager) Stop() {
@@ -134,5 +140,9 @@ func (cm *CredentialsManager) Register(m *nats.Msg) {
 }
 
 func (cm *CredentialsManager) UpdateConfig(m *nats.Msg) {
-	cm.backend.UpdateConfig(m.Data)
+	if err := cm.backend.UpdateConfig(m.Data); err != nil {
+		m.Respond([]byte(err.Error()))
+	} else {
+		m.Respond(nil)
+	}
 }

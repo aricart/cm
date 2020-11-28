@@ -8,11 +8,11 @@ import (
 )
 
 func main() {
-	var config cm.CredentialsManager
-	flag.StringVar(&config.NatsHostPort, "nats hostport", "localhost:4222", "NATS hostport")
-	flag.StringVar(&config.CredentialsFile, "creds", "", "NATS credentials file")
-	flag.StringVar(&config.DataDir, "data", "", "data directory")
+	var server cm.CredentialsManager
+	flag.StringVar(&server.NatsHostPort, "nats hostport", "localhost:4222", "NATS hostport")
+	flag.StringVar(&server.CredentialsFile, "creds", "", "NATS credentials file")
+	flag.StringVar(&server.DataDir, "data", "", "data directory")
 	flag.Parse()
-	config.Run()
+	server.Run()
 	runtime.Goexit()
 }

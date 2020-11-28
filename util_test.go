@@ -1,18 +1,24 @@
 package cm
 
 import (
+	"encoding/json"
+	"fmt"
+	natsservertest "github.com/nats-io/nats-server/v2/test"
 	"io/ioutil"
 	"os"
 	"testing"
 
 	"github.com/nats-io/jwt"
-
+	natsserver "github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 	"github.com/stretchr/testify/require"
 )
 
 type TestSetup struct {
-	dir string
+	dir         string
+	ns          *natsserver.Server
+	connections []*nats.Conn
 }
 
 func NewTestSetup(t *testing.T) *TestSetup {
@@ -20,10 +26,36 @@ func NewTestSetup(t *testing.T) *TestSetup {
 	var ts TestSetup
 	ts.dir, err = ioutil.TempDir(os.TempDir(), "cm_")
 	require.NoError(t, err)
+
+	opts := natsservertest.DefaultTestOptions
+	opts.Port = -1
+	ts.ns = natsservertest.RunServer(&opts)
+
 	return &ts
 }
 
+func (ts *TestSetup) NatsClient(t *testing.T, name string) *nats.Conn {
+	opts := nats.Options{}
+	opts.Url = ts.ns.ClientURL()
+	if name != "" {
+		opts.Name = name
+	}
+	nc, err := opts.Connect()
+	require.NoError(t, err)
+	ts.connections = append(ts.connections, nc)
+	if name != "" {
+		t.Log(fmt.Printf("client %q connected to %s", name, nc.ConnectedUrl()))
+	}
+	return nc
+}
+
 func (ts *TestSetup) Cleanup(t *testing.T) {
+	for _, nc := range ts.connections {
+		nc.Close()
+	}
+	if ts.ns != nil {
+		ts.ns.Shutdown()
+	}
 	if t.Failed() {
 		t.Log("test files", ts.dir)
 	} else {
@@ -102,4 +134,10 @@ func (ts *TestSetup) CreateUser(t *testing.T, email string, akp nkeys.KeyPair) s
 	token, err := uc.Encode(akp)
 	require.NoError(t, err)
 	return token
+}
+
+func (ts *TestSetup) ToJSON(t *testing.T, o interface{}) []byte {
+	d, err := json.Marshal(o)
+	require.NoError(t, err)
+	return d
 }
