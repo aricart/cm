@@ -11,7 +11,7 @@ import (
 )
 
 func TestBackend_UpdateAccount(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	var cm CredentialsManager
@@ -50,7 +50,7 @@ func TestBackend_UpdateAccount(t *testing.T) {
 }
 
 func TestBackend_GetUserJwt(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	c, akp := setupAccount(t, ts, Generator)
@@ -76,7 +76,7 @@ func TestBackend_GetUserJwt(t *testing.T) {
 }
 
 func TestBackend_GetStaticUserJwt(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	_, akp := setupAccount(t, ts, Static)
@@ -107,7 +107,7 @@ func TestBackend_GetStaticUserJwt(t *testing.T) {
 }
 
 func TestBackend_ListAccounts(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	_, akp := setupAccount(t, ts, Generator)
@@ -124,7 +124,7 @@ func TestBackend_ListAccounts(t *testing.T) {
 	require.Equal(t, ts.PublicKey(t, akp), uresp.Accounts[0])
 }
 
-func setupAccount(t *testing.T, ts *TestSetup, kind ResolverType) (*ResolverConfig, nkeys.KeyPair) {
+func setupAccount(t *testing.T, ts *CredentialsTestSetup, kind ResolverType) (*ResolverConfig, nkeys.KeyPair) {
 	var cm CredentialsManager
 	cm.NatsHostPort = ts.ns.ClientURL()
 	cm.DataDir = ts.dir

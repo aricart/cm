@@ -11,7 +11,7 @@ import (
 )
 
 func TestEmpty(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	r, err := NewStaticResolver(ts.dir)
@@ -30,7 +30,7 @@ func TestEmpty(t *testing.T) {
 }
 
 func TestGetAccount(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	akp := ts.CreateAccountPair(t)
@@ -79,7 +79,7 @@ func TestGetAccount(t *testing.T) {
 }
 
 func TestRemoveUser(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	akp := ts.CreateAccountPair(t)
@@ -123,7 +123,7 @@ func TestRemoveUser(t *testing.T) {
 }
 
 func TestRequiredDirCreated(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	dir := filepath.Join(ts.dir, "xxx")
@@ -133,7 +133,7 @@ func TestRequiredDirCreated(t *testing.T) {
 }
 
 func TestUnsuportedStoreErrors(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	r, err := NewStaticResolver(ts.dir)

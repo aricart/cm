@@ -16,15 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type TestSetup struct {
+type CredentialsTestSetup struct {
 	dir         string
 	ns          *natsserver.Server
 	connections []*nats.Conn
 }
 
-func NewTestSetup(t *testing.T) *TestSetup {
+func NewCredentialsTestSetup(t *testing.T) *CredentialsTestSetup {
 	var err error
-	var ts TestSetup
+	var ts CredentialsTestSetup
 	ts.dir, err = ioutil.TempDir(os.TempDir(), "cm_")
 	require.NoError(t, err)
 
@@ -35,7 +35,7 @@ func NewTestSetup(t *testing.T) *TestSetup {
 	return &ts
 }
 
-func (ts *TestSetup) NatsClient(t *testing.T, name string) *nats.Conn {
+func (ts *CredentialsTestSetup) NatsClient(t *testing.T, name string) *nats.Conn {
 	opts := nats.Options{}
 	opts.Url = ts.ns.ClientURL()
 	if name != "" {
@@ -50,7 +50,7 @@ func (ts *TestSetup) NatsClient(t *testing.T, name string) *nats.Conn {
 	return nc
 }
 
-func (ts *TestSetup) Cleanup(t *testing.T) {
+func (ts *CredentialsTestSetup) Cleanup(t *testing.T) {
 	for _, nc := range ts.connections {
 		nc.Close()
 	}
@@ -64,19 +64,19 @@ func (ts *TestSetup) Cleanup(t *testing.T) {
 	}
 }
 
-func (ts *TestSetup) PublicKey(t *testing.T, kp nkeys.KeyPair) string {
+func (ts *CredentialsTestSetup) PublicKey(t *testing.T, kp nkeys.KeyPair) string {
 	pk, err := kp.PublicKey()
 	require.NoError(t, err)
 	return pk
 }
 
-func (ts *TestSetup) SeedKey(t *testing.T, kp nkeys.KeyPair) string {
+func (ts *CredentialsTestSetup) SeedKey(t *testing.T, kp nkeys.KeyPair) string {
 	pk, err := kp.Seed()
 	require.NoError(t, err)
 	return string(pk)
 }
 
-func (ts *TestSetup) SerializableKeys(t *testing.T, kp nkeys.KeyPair) (string, []byte) {
+func (ts *CredentialsTestSetup) SerializableKeys(t *testing.T, kp nkeys.KeyPair) (string, []byte) {
 	pk, err := kp.PublicKey()
 	require.NoError(t, err)
 	seed, err := kp.Seed()
@@ -84,23 +84,23 @@ func (ts *TestSetup) SerializableKeys(t *testing.T, kp nkeys.KeyPair) (string, [
 	return pk, seed
 }
 
-func (ts *TestSetup) CreateAccountPair(t *testing.T) nkeys.KeyPair {
+func (ts *CredentialsTestSetup) CreateAccountPair(t *testing.T) nkeys.KeyPair {
 	kp, err := nkeys.CreateAccount()
 	require.NoError(t, err)
 	return kp
 }
 
-func (ts *TestSetup) CreateUserPair(t *testing.T) nkeys.KeyPair {
+func (ts *CredentialsTestSetup) CreateUserPair(t *testing.T) nkeys.KeyPair {
 	kp, err := nkeys.CreateUser()
 	require.NoError(t, err)
 	return kp
 }
 
-func (ts *TestSetup) MakeUserConfig(email string, role UserRole) User {
+func (ts *CredentialsTestSetup) MakeUserConfig(email string, role UserRole) User {
 	return User{Email: email, Role: role}
 }
 
-func (ts *TestSetup) MakeRolePerm(t *testing.T, role UserRole, subj []string) RolePerms {
+func (ts *CredentialsTestSetup) MakeRolePerm(t *testing.T, role UserRole, subj []string) RolePerms {
 	var r RolePerms
 	r.Role = role
 	r.SigningKey = ts.SeedKey(t, ts.CreateAccountPair(t))
@@ -109,19 +109,19 @@ func (ts *TestSetup) MakeRolePerm(t *testing.T, role UserRole, subj []string) Ro
 	return r
 }
 
-func (ts *TestSetup) Encode(t *testing.T, c jwt.Claims, kp nkeys.KeyPair) string {
+func (ts *CredentialsTestSetup) Encode(t *testing.T, c jwt.Claims, kp nkeys.KeyPair) string {
 	token, err := c.Encode(kp)
 	require.NoError(t, err)
 	return token
 }
 
-func (ts *TestSetup) EncodeResolverConfig(t *testing.T, rc ResolverConfig, kp nkeys.KeyPair) string {
+func (ts *CredentialsTestSetup) EncodeResolverConfig(t *testing.T, rc ResolverConfig, kp nkeys.KeyPair) string {
 	token, err := rc.Encode(kp)
 	require.NoError(t, err)
 	return token
 }
 
-func (ts *TestSetup) CreateResolverConfig(t *testing.T, kind ResolverType) ResolverConfig {
+func (ts *CredentialsTestSetup) CreateResolverConfig(t *testing.T, kind ResolverType) ResolverConfig {
 	var rc ResolverConfig
 	rc.Kind = kind
 	if kind == Generator {
@@ -134,7 +134,7 @@ func (ts *TestSetup) CreateResolverConfig(t *testing.T, kind ResolverType) Resol
 	return rc
 }
 
-func (ts *TestSetup) CreateUser(t *testing.T, email string, akp nkeys.KeyPair) string {
+func (ts *CredentialsTestSetup) CreateUser(t *testing.T, email string, akp nkeys.KeyPair) string {
 	uc := jwt.NewUserClaims(ts.PublicKey(t, ts.CreateUserPair(t)))
 	uc.Name = email
 	uc.BearerToken = true
@@ -143,13 +143,13 @@ func (ts *TestSetup) CreateUser(t *testing.T, email string, akp nkeys.KeyPair) s
 	return token
 }
 
-func (ts *TestSetup) ToJSON(t *testing.T, o interface{}) []byte {
+func (ts *CredentialsTestSetup) ToJSON(t *testing.T, o interface{}) []byte {
 	d, err := json.Marshal(o)
 	require.NoError(t, err)
 	return d
 }
 
-func (ts *TestSetup) FromJSON(t *testing.T, d []byte, o interface{}) {
+func (ts *CredentialsTestSetup) FromJSON(t *testing.T, d []byte, o interface{}) {
 	err := json.Unmarshal(d, o)
 	require.NoError(t, err)
 }

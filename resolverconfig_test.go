@@ -7,7 +7,7 @@ import (
 )
 
 func TestStaticEmptyConfig(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	var err error

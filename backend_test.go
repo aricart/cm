@@ -7,7 +7,7 @@ import (
 )
 
 func TestBackendSimple(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	be := NewBackend(ts.dir)

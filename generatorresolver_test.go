@@ -8,7 +8,7 @@ import (
 )
 
 func TestGeneratorResolver(t *testing.T) {
-	ts := NewTestSetup(t)
+	ts := NewCredentialsTestSetup(t)
 	defer ts.Cleanup(t)
 
 	be := NewBackend(ts.dir)
